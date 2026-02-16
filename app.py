@@ -1,29 +1,11 @@
-# #https://github.com/RapidAI/RapidOCR
-# from rapidocr import RapidOCR
+#https://www.paddleocr.ai/v3.3.2/en/version3.x/pipeline_usage/PP-StructureV3.html#22-python-script-integration
 
-# engine = RapidOCR()
+from paddleocr import LayoutDetection
 
-# img_url = "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/master/resources/test_files/ch_en_num.jpg"
-# result = engine(img_url)
-# print(result)
-
-# result.vis("vis_result.jpg")
-
-# Initialize PaddleOCR instance
-from paddleocr import PaddleOCR
-
-ocr = PaddleOCR(
-    use_doc_orientation_classify=False,
-    use_doc_unwarping=False,
-    use_textline_orientation=False,
-    enable_mkldnn=False  # Disable OneDNN/MKLDNN
-)
-
-result = ocr.predict(
-    input="https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_002.png"
-)
-
-for res in result:
+model = LayoutDetection(model_name="PP-DocLayout_plus-L")
+output = model.predict("layout.jpg", batch_size=1, layout_nms=True)
+for res in output:
     res.print()
-    res.save_to_img("output")
-    res.save_to_json("output")
+    res.save_to_img(save_path="./output/")
+    res.save_to_json(save_path="./output/res.json")
+

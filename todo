@@ -2,7 +2,7 @@ Main Plan: Create an OCR Model given a template
 
 Steps
 1. Template Definition & Setup
-2, Template Mapping
+2. Template Mapping
 3. Image Preprocessing
 4. Text Detection
 5. Text Recognition

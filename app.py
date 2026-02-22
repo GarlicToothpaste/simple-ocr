@@ -1,8 +1,9 @@
 from paddleocr import PPStructureV3
 
-pipeline = PPStructureV3(enable_mkldnn=False)
 
-output = pipeline.predict("./sample_id.png")
+pipeline = PPStructureV3(text_recognition_model_name="en_PP-OCRv5_mobile_rec" , enable_mkldnn=False)
+
+output = pipeline.predict("./testocr.png")
 for res in output:
     res.print() ## Print the structured prediction output
     res.save_to_json(save_path="output") ## Save the current image's structured result in JSON format

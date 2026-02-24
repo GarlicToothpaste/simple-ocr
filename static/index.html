@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PaddleOCR — Extract</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0c0c0e;
+    --surface: #141417;
+    --border: #232328;
+    --accent: #e8ff47;
+    --accent2: #47ffe8;
+    --muted: #555560;
+    --text: #e8e8f0;
+    --radius: 12px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr;
+  }
+
+  /* Grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.4;
+  }
+
+  header {
+    padding: 32px 40px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo-dot {
+    width: 10px; height: 10px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 12px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.7); }
+  }
+
+  header h1 {
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  header span {
+    color: var(--accent);
+  }
+
+  .badge {
+    margin-left: auto;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 100px;
+    letter-spacing: 0.06em;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    height: calc(100vh - 73px);
+    overflow: hidden;
+  }
+
+  /* LEFT PANEL */
+  .left {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 32px;
+    gap: 24px;
+    overflow-y: auto;
+  }
+
+  .panel-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* Drop zone */
+  #dropzone {
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    min-height: 260px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #dropzone:hover, #dropzone.drag-over {
+    border-color: var(--accent);
+    background: #1a1a10;
+  }
+
+  #dropzone.drag-over::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(232, 255, 71, 0.04);
+  }
+
+  #dropzone svg {
+    color: var(--muted);
+    transition: color 0.2s;
+  }
+
+  #dropzone:hover svg { color: var(--accent); }
+
+  .drop-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .drop-sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+
+  #file-input { display: none; }
+
+  /* Preview */
+  #preview-wrap {
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  #preview-wrap img {
+    width: 100%;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    object-fit: contain;
+    max-height: 320px;
+    background: #1a1a20;
+  }
+
+  .file-info {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .file-info span {
+    color: var(--text);
+  }
+
+  /* Extract button */
+  #extract-btn {
+    background: var(--accent);
+    color: #0c0c0e;
+    border: none;
+    border-radius: var(--radius);
+    padding: 14px 24px;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  #extract-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+  #extract-btn:active { transform: translateY(0); }
+  #extract-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* Spinner */
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid rgba(12,12,14,0.3);
+    border-top-color: #0c0c0e;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* RIGHT PANEL */
+  .right {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+  }
+
+  .tab {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 18px 0;
+    margin-right: 28px;
+    cursor: pointer;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s, border-color 0.2s;
+    background: none;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+  }
+
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 32px;
+    display: none;
+  }
+
+  .tab-content.active { display: block; }
+
+  /* Empty state */
+  .empty-state {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .empty-state p {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 1.7;
+  }
+
+  /* Markdown output */
+  #markdown-output {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    line-height: 1.8;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  #markdown-output h1, #markdown-output h2, #markdown-output h3 {
+    font-family: 'Syne', sans-serif;
+    color: var(--accent);
+    margin: 1.5em 0 0.5em;
+  }
+
+  /* JSON output */
+  #json-output {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    line-height: 1.7;
+    color: #a0e0cc;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Status bar */
+  #status-bar {
+    border-top: 1px solid var(--border);
+    padding: 10px 32px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.06em;
+  }
+
+  #status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+
+  #status-dot.ok { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  #status-dot.err { background: #ff6b6b; box-shadow: 0 0 6px #ff6b6b; }
+  #status-dot.busy { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); animation: pulse 0.8s ease-in-out infinite; }
+
+  /* Error box */
+  .error-box {
+    background: #1a0c0c;
+    border: 1px solid #5a1a1a;
+    border-radius: var(--radius);
+    padding: 16px;
+    color: #ff9999;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 1.6;
+  }
+
+  /* Copy button */
+  .copy-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  @media (max-width: 768px) {
+    main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .left { border-right: none; border-bottom: 1px solid var(--border); padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-dot"></div>
+  <h1>Paddle<span>OCR</span></h1>
+  <div class="badge">PPStructureV3 · en_PP-OCRv5</div>
+</header>
+
+<main>
+  <!-- LEFT -->
+  <div class="left">
+    <div class="panel-label">Input Image</div>
+
+    <div id="dropzone" onclick="document.getElementById('file-input').click()">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <path d="m21 15-5-5L5 21"/>
+      </svg>
+      <div class="drop-title">Drop PNG here</div>
+      <div class="drop-sub">or click to browse · PNG / JPG / WEBP</div>
+    </div>
+
+    <input type="file" id="file-input" accept="image/*" />
+
+    <div id="preview-wrap">
+      <img id="preview-img" src="" alt="Preview" />
+      <div class="file-info">
+        File: <span id="file-name">—</span> &nbsp;·&nbsp; Size: <span id="file-size">—</span>
+      </div>
+    </div>
+
+    <button id="extract-btn">
+      <span class="btn-label">Extract Text</span>
+      <div class="spinner" id="spinner"></div>
+    </button>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right">
+    <div class="tabs">
+      <button class="tab active" data-tab="markdown">Markdown</button>
+      <button class="tab" data-tab="json">JSON</button>
+    </div>
+
+    <div id="tab-markdown" class="tab-content active">
+      <div class="empty-state" id="md-empty">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <p>Upload an image and run extraction<br/>to see the structured markdown output.</p>
+      </div>
+      <div id="md-result" style="display:none">
+        <button class="copy-btn" onclick="copyText('markdown-output')">Copy</button>
+        <div id="markdown-output"></div>
+      </div>
+    </div>
+
+    <div id="tab-json" class="tab-content">
+      <div class="empty-state" id="json-empty">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
+          <polyline points="16 18 22 12 16 6"/>
+          <polyline points="8 6 2 12 8 18"/>
+        </svg>
+        <p>JSON output will appear here<br/>after extraction completes.</p>
+      </div>
+      <div id="json-result" style="display:none">
+        <button class="copy-btn" onclick="copyText('json-output')">Copy</button>
+        <pre id="json-output"></pre>
+      </div>
+    </div>
+
+    <div id="status-bar">
+      <div id="status-dot"></div>
+      <span id="status-text">Ready</span>
+    </div>
+  </div>
+</main>
+
+<script>
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('file-input');
+  const previewWrap = document.getElementById('preview-wrap');
+  const previewImg = document.getElementById('preview-img');
+  const fileName = document.getElementById('file-name');
+  const fileSize = document.getElementById('file-size');
+  const extractBtn = document.getElementById('extract-btn');
+  const spinner = document.getElementById('spinner');
+  const statusDot = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+
+  let currentFile = null;
+
+  // Drag & drop
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) handleFile(e.target.files[0]);
+  });
+
+  function handleFile(file) {
+    currentFile = file;
+    const reader = new FileReader();
+    reader.onload = e => {
+      previewImg.src = e.target.result;
+      previewWrap.style.display = 'flex';
+      dropzone.style.display = 'none';
+      extractBtn.style.display = 'flex';
+      fileName.textContent = file.name;
+      fileSize.textContent = formatBytes(file.size);
+      setStatus('idle', `Image loaded — ${file.name}`);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function formatBytes(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1024**2) return (b/1024).toFixed(1) + ' KB';
+    return (b/1024**2).toFixed(1) + ' MB';
+  }
+
+  function setStatus(type, msg) {
+    statusDot.className = '';
+    if (type === 'ok') statusDot.classList.add('ok');
+    else if (type === 'err') statusDot.classList.add('err');
+    else if (type === 'busy') statusDot.classList.add('busy');
+    statusText.textContent = msg;
+  }
+
+  // Tabs
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  // Extract
+  extractBtn.addEventListener('click', async () => {
+    if (!currentFile) return;
+
+    extractBtn.disabled = true;
+    extractBtn.querySelector('.btn-label').textContent = 'Extracting…';
+    spinner.style.display = 'block';
+    setStatus('busy', 'Running PaddleOCR pipeline…');
+
+    const formData = new FormData();
+    formData.append('file', currentFile);
+
+    try {
+      const res = await fetch('/ocr', { method: 'POST', body: formData });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        showError(data.error || 'Unknown error');
+        setStatus('err', 'Extraction failed');
+      } else {
+        showResults(data);
+        setStatus('ok', 'Extraction complete');
+      }
+    } catch (err) {
+      showError(err.message);
+      setStatus('err', 'Network error');
+    } finally {
+      extractBtn.disabled = false;
+      extractBtn.querySelector('.btn-label').textContent = 'Extract Text';
+      spinner.style.display = 'none';
+    }
+  });
+
+  function showResults(data) {
+    // Markdown tab
+    document.getElementById('md-empty').style.display = 'none';
+    const mdResult = document.getElementById('md-result');
+    mdResult.style.display = 'block';
+    document.getElementById('markdown-output').textContent = data.markdown || '(No markdown output)';
+
+    // JSON tab
+    document.getElementById('json-empty').style.display = 'none';
+    const jsonResult = document.getElementById('json-result');
+    jsonResult.style.display = 'block';
+    document.getElementById('json-output').textContent = JSON.stringify(data.json, null, 2);
+  }
+
+  function showError(msg) {
+    document.getElementById('md-empty').style.display = 'none';
+    document.getElementById('md-result').style.display = 'block';
+    document.getElementById('markdown-output').innerHTML = `<div class="error-box">⚠ ${msg}</div>`;
+  }
+
+  function copyText(id) {
+    const text = document.getElementById(id).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      setStatus('ok', 'Copied to clipboard');
+      setTimeout(() => setStatus('idle', 'Ready'), 2000);
+    });
+  }
+</script>
+</body>
+</html>
